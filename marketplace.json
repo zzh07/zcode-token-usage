@@ -1,0 +1,32 @@
+{
+  "name": "zcode-token-usage",
+  "description": "Token usage footer for ZCode: shows how many tokens each task actually consumed, right at the bottom of the task.",
+  "plugins": [
+    {
+      "name": "token-usage",
+      "displayName": "Token Usage",
+      "displayName_i18n": {
+        "en": "Token Usage",
+        "zh-CN": "Token 用量统计"
+      },
+      "description": "Shows how many tokens each task actually consumed. A Stop hook sums the real per-call model usage recorded for the finished turn and posts a compact footer (input/output/cache breakdown, call count, model) at the bottom of the task. Includes a /tokens command and a local usage archive.",
+      "description_i18n": {
+        "en": "Shows how many tokens each task actually consumed. A Stop hook sums the real per-call model usage recorded for the finished turn and posts a compact footer (input/output/cache breakdown, call count, model) at the bottom of the task. Includes a /tokens command and a local usage archive.",
+        "zh-CN": "显示每个任务实际消耗的 Token 数量：通过 Stop hook 按任务汇总模型 API 调用的真实用量，在任务底部以一行页脚展示（输入/输出/缓存拆分、调用次数、模型）。附带 /tokens 查询命令与本地用量留档。"
+      },
+      "version": "0.1.0",
+      "author": {
+        "name": "token-usage contributors"
+      },
+      "category": "developer-tools",
+      "keywords": [
+        "zcode",
+        "tokens",
+        "usage",
+        "hook",
+        "metrics"
+      ],
+      "source": "./"
+    }
+  ]
+}

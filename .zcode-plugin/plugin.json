@@ -1,0 +1,7 @@
+{
+  "name": "token-usage",
+  "version": "0.1.0",
+  "description": "Shows how many tokens each task consumed. A Stop hook sums the model API usage recorded for the finished turn (from the session rollout log) and makes a compact footer with input/output/cache token counts appear at the bottom of the task.",
+  "author": { "name": "ZCode agent" },
+  "commands": "commands"
+}

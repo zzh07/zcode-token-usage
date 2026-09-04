@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/scripts/token-usage.js"],
+            "timeoutMs": 15000,
+            "statusMessage": "统计 Token 消耗 (token-usage)"
+          }
+        ]
+      }
+    ]
+  }
+}
