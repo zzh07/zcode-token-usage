@@ -15,10 +15,12 @@
  * 按 turnId 过滤 querySource==="main_turn" 的行求和,即该任务的总消耗
  * (session_title 等辅助调用共用 turnId 但 querySource 不同,必须排除)。
  *
- * 输出协议(core 会解析的顶层字段):continue / decision / reason / stopReason /
- * systemMessage / additionalContext / suppressOutput。
- * continue:true + additionalContext 会让模型带着这条上下文补跑一轮——
- * 我们用它让模型在任务底部补发一行 token 页脚,这是 hook 唯一的可见输出通道。
+ * v0.2.0 输出通道(修复 0.1.0 的"页脚顶掉回答"问题):
+ *   - system(默认): 经 systemMessage 直接向用户展示页脚,零额外模型调用,
+ *     任何模型下都不可能影响回答文本;
+ *   - footer: 仍走 continue+additionalContext 补跑,但指令改为"在同一条回答
+ *     消息末尾续写追加",并新增空回答守卫(回答为空时不补跑);
+ *   - silent: 仅留档;off: 完全关闭。
  * stop_hook_active=true 表示当前已是补跑轮,必须静默退出,否则会循环(core 上限 3 次)。
  */
 'use strict';
@@ -45,7 +47,7 @@ function readStdin() {
 }
 
 function loadConfig() {
-  const defaults = { mode: 'footer', language: 'zh', showCache: true };
+  const defaults = { mode: 'system', language: 'zh', showCache: true };
   try {
     const file = path.join(PLUGIN_ROOT, 'config.json');
     return { ...defaults, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
@@ -58,9 +60,11 @@ function resolveRolloutFile(sessionId, rolloutDir) {
   const dir = rolloutDir || path.join(os.homedir(), '.zcode', 'cli', 'rollout');
   const exact = path.join(dir, `model-io-${sessionId}.jsonl`);
   if (fs.existsSync(exact)) return exact;
-  for (const name of fs.readdirSync(dir)) {
-    if (name.endsWith('.jsonl') && name.includes(sessionId)) return path.join(dir, name);
-  }
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (name.endsWith('.jsonl') && name.includes(sessionId)) return path.join(dir, name);
+    }
+  } catch { /* 目录不存在时忽略 */ }
   return null;
 }
 
@@ -157,6 +161,8 @@ async function main() {
   // 兜底:上一条助手消息本身就是页脚时不再补发
   const lastMsg = String(input.last_assistant_message || input.lastAssistantMessage || '');
   if (lastMsg.length < 400 && lastMsg.includes(FOOTER_MARKER) && lastMsg.includes('---')) return;
+  // v0.2.0 守卫:回答为空(生成失败/被中断)时不补跑,避免"整条回复只剩页脚"
+  if (!lastMsg.trim()) return;
 
   const cfg = loadConfig();
   if (cfg.mode === 'off') return;
@@ -171,15 +177,24 @@ async function main() {
   if (!agg || agg.requests === 0) return;
 
   logSidecar(sessionId, input.turnId || input.turn_id || '(unknown)', agg);
+
+  // v0.2.0 默认:systemMessage 直达用户,不触发模型补跑
+  if (cfg.mode === 'system') {
+    process.stdout.write(JSON.stringify({ systemMessage: buildFooter(agg, cfg) }));
+    return;
+  }
+
   if (cfg.mode === 'silent') {
     process.stdout.write(JSON.stringify({ suppressOutput: true }));
     return;
   }
 
+  // footer 模式:补跑追加页脚。指令为"续写追加"语义(0.1.0 的"只输出页脚"
+  // 指令会让轻量模型把补跑轮整条吐成页脚,从用户视角顶掉了回答文本)。
   const footer = buildFooter(agg, cfg);
   const instruction = cfg.language === 'en'
-    ? `[token-usage plugin] The task just finished. Post a task footer: output ONLY the following two lines, copied verbatim — no other words, no tool calls, no code block:\n---\n${footer}`
-    : `[token-usage 插件] 本轮任务已结束。请补发一条任务页脚:只输出下面这两行内容,逐字复制,不要加任何解释或其他文字,不要调用任何工具,不要用代码块:\n---\n${footer}`;
+    ? `[token-usage plugin] The task finished and your answer above was already delivered. Continue THAT SAME message by appending a footer: output only one line of --- followed by the footer line below, copied verbatim. Do not output anything else — do not repeat or rewrite your answer, do not explain, do not call tools. Finish immediately after.\n---\n${footer}`
+    : `[token-usage 插件] 本轮任务已结束,你上面的回答已完整送达。请在那条回答消息的末尾续写追加页脚:只输出一行 --- ,随后一行是下面的页脚文本(逐字复制)。除此之外不要输出任何内容——不要重复或改写你的回答,不要解释,不要调用工具。追加完成后立即结束。\n---\n${footer}`;
 
   process.stdout.write(JSON.stringify({
     continue: true,
